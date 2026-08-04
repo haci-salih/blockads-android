@@ -68,6 +68,10 @@ class AppPreferences(private val context: Context) {
         private val KEY_SPLIT_DNS_ZONES = stringPreferencesKey("split_dns_zones")
         private val KEY_EXCLUDE_LAN = booleanPreferencesKey("exclude_lan")
         private val KEY_TRUSTED_SSIDS = stringSetPreferencesKey("trusted_ssids")
+        // Global bandwidth throttle, in KB/s. 0 = unlimited (default).
+        // Applies to the whole tunnel (all apps combined), not per-app.
+        private val KEY_BANDWIDTH_LIMIT_DOWN_KBPS = intPreferencesKey("bandwidth_limit_down_kbps")
+        private val KEY_BANDWIDTH_LIMIT_UP_KBPS = intPreferencesKey("bandwidth_limit_up_kbps")
         private val KEY_PAUSE_ON_TRUSTED = booleanPreferencesKey("pause_on_trusted")
         private val KEY_PAUSED_BY_TRUSTED = booleanPreferencesKey("paused_by_trusted")
         private val KEY_PAUSED_TRUSTED_SSID = stringPreferencesKey("paused_trusted_ssid")
@@ -140,6 +144,9 @@ class AppPreferences(private val context: Context) {
         const val DNS_RESPONSE_NXDOMAIN = "nxdomain"
         const val DNS_RESPONSE_REFUSED = "refused"
         const val DNS_RESPONSE_CUSTOM_IP = "custom_ip"
+
+        // 0 = unlimited. Other presets are in KB/s.
+        const val BANDWIDTH_LIMIT_UNLIMITED = 0
 
         const val DEFAULT_FILTER_URL = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
         const val DEFAULT_UPSTREAM_DNS = "9.9.9.9"
@@ -716,6 +723,34 @@ class AppPreferences(private val context: Context) {
 
     suspend fun getFilterHttp3Snapshot(): Boolean {
         return context.dataStore.data.first()[KEY_FILTER_HTTP3] ?: false
+    }
+
+    // ── Bandwidth Limit ──────────────────────────────────────────────────
+    // Global throttle for the whole tunnel (all apps combined), in KB/s.
+    // 0 = unlimited (default). Enforced on the Go side (bufferedTun in
+    // fulltunnel.go), independent of DNS-only vs HTTPS-filtering mode.
+
+    val bandwidthLimitDownKbps: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[KEY_BANDWIDTH_LIMIT_DOWN_KBPS] ?: BANDWIDTH_LIMIT_UNLIMITED
+    }
+
+    val bandwidthLimitUpKbps: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[KEY_BANDWIDTH_LIMIT_UP_KBPS] ?: BANDWIDTH_LIMIT_UNLIMITED
+    }
+
+    suspend fun setBandwidthLimitKbps(downKbps: Int, upKbps: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_BANDWIDTH_LIMIT_DOWN_KBPS] = downKbps
+            prefs[KEY_BANDWIDTH_LIMIT_UP_KBPS] = upKbps
+        }
+    }
+
+    suspend fun getBandwidthLimitDownKbpsSnapshot(): Int {
+        return context.dataStore.data.first()[KEY_BANDWIDTH_LIMIT_DOWN_KBPS] ?: BANDWIDTH_LIMIT_UNLIMITED
+    }
+
+    suspend fun getBandwidthLimitUpKbpsSnapshot(): Int {
+        return context.dataStore.data.first()[KEY_BANDWIDTH_LIMIT_UP_KBPS] ?: BANDWIDTH_LIMIT_UNLIMITED
     }
 
     suspend fun setSelectedBrowsers(packages: Set<String>) {
