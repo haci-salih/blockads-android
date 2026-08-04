@@ -76,7 +76,7 @@ Join our community:
 ## Sponsor
 
 If you enjoy BlockAds, consider supporting the project! Your sponsorship helps us maintain and
-improve the app.
+improve the app
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-red?logo=github-sponsors)](https://github.com/sponsors/pass-with-high-score)
 
