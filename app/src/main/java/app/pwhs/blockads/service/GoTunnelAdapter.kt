@@ -359,7 +359,7 @@ class GoTunnelAdapter(
         // mode uses a different TUN bridge (channelTUN) that isn't wired
         // up to the limiter yet. Safe to call regardless — 0 means
         // unlimited and is a no-op either way.
-        engine.setBandwidthLimitKbps(downKbps, upKbps)
+        engine.setBandwidthLimitKbps(downKbps.toLong(), upKbps.toLong())
         if (downKbps > 0 || upKbps > 0) {
             Timber.d("Bandwidth limit set: down=${downKbps}KB/s up=${upKbps}KB/s")
         }
