@@ -78,7 +78,8 @@ fun SettingsScreen(
     val dailySummaryEnabled by viewModel.dailySummaryEnabled.collectAsStateWithLifecycle()
     val milestoneNotificationsEnabled by viewModel.milestoneNotificationsEnabled.collectAsStateWithLifecycle()
     val upstreamDNS by viewModel.upstreamDns.collectAsStateWithLifecycle()
-    val bandwidthLimitKbps by viewModel.bandwidthLimitKbps.collectAsStateWithLifecycle()
+    val bandwidthLimitDownKbps by viewModel.bandwidthLimitDownKbps.collectAsStateWithLifecycle()
+    val bandwidthLimitUpKbps by viewModel.bandwidthLimitUpKbps.collectAsStateWithLifecycle()
 
     var showDnsResponseTypeDialog by remember { mutableStateOf(false) }
     var showBandwidthLimitDialog by remember { mutableStateOf(false) }
@@ -128,7 +129,8 @@ fun SettingsScreen(
 
                 dnsResponseType = dnsResponseType,
                 upstreamDNS = upstreamDNS,
-                bandwidthLimitKbps = bandwidthLimitKbps,
+                bandwidthLimitDownKbps = bandwidthLimitDownKbps,
+                bandwidthLimitUpKbps = bandwidthLimitUpKbps,
                 onSetAutoReconnect = { viewModel.setAutoReconnect(it) },
 
                 onSetRoutingMode = { viewModel.setRoutingModeEnabled(it) },
@@ -236,9 +238,10 @@ fun SettingsScreen(
 
         if (showBandwidthLimitDialog) {
             BandwidthLimitDialog(
-                currentKbps = bandwidthLimitKbps,
-                onSelect = { kbps ->
-                    viewModel.setBandwidthLimitKbps(kbps)
+                currentDownKbps = bandwidthLimitDownKbps,
+                currentUpKbps = bandwidthLimitUpKbps,
+                onApply = { down, up ->
+                    viewModel.setBandwidthLimitKbps(down, up)
                     showBandwidthLimitDialog = false
                 },
                 onDismiss = { showBandwidthLimitDialog = false }
