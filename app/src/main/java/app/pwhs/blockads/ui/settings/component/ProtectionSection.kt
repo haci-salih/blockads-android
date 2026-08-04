@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ fun ProtectionSection(
 
     dnsResponseType: String,
     upstreamDNS: String,
+    bandwidthLimitKbps: Int,
     onSetAutoReconnect: (Boolean) -> Unit,
     onSetRoutingMode: (Boolean) -> Unit,
     onSetNetworkSwitchDelayEnabled: (Boolean) -> Unit,
@@ -55,6 +57,7 @@ fun ProtectionSection(
 
     onSetYoutubeRestrictedMode: (Boolean) -> Unit,
     onShowDnsResponseTypeDialog: () -> Unit,
+    onShowBandwidthLimitDialog: () -> Unit,
     onNavigateToDNSProvider: () -> Unit,
     onNavigateToWireGuardImport: () -> Unit,
     onNavigateToHttpsFiltering: () -> Unit,
@@ -172,6 +175,21 @@ fun ProtectionSection(
                         else -> stringResource(R.string.dns_response_custom_ip)
                     },
                     onClick = onShowDnsResponseTypeDialog
+                )
+                // Bandwidth Limit (global up/down throttle, all apps combined)
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                )
+                SettingItem(
+                    icon = Icons.Default.Speed,
+                    title = "Bant Genişliği Sınırı",
+                    desc = if (bandwidthLimitKbps <= AppPreferences.BANDWIDTH_LIMIT_UNLIMITED) {
+                        "Sınırsız"
+                    } else {
+                        "$bandwidthLimitKbps KB/s"
+                    },
+                    onClick = onShowBandwidthLimitDialog
                 )
                 // DNS Provider
                 HorizontalDivider(
