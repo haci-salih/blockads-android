@@ -98,6 +98,16 @@ class SettingsViewModel(
             AppPreferences.DNS_RESPONSE_CUSTOM_IP
         )
 
+    // Global bandwidth throttle (KB/s, 0 = unlimited). Down/up share one
+    // value in the UI for simplicity; the underlying prefs/engine API
+    // supports setting them independently if ever needed.
+    val bandwidthLimitKbps: StateFlow<Int> = appPrefs.bandwidthLimitDownKbps
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            AppPreferences.BANDWIDTH_LIMIT_UNLIMITED
+        )
+
     val safeSearchEnabled: StateFlow<Boolean> = appPrefs.safeSearchEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -244,6 +254,13 @@ class SettingsViewModel(
     fun setDnsResponseType(responseType: String) {
         viewModelScope.launch {
             appPrefs.setDnsResponseType(responseType)
+            requestVpnRestart()
+        }
+    }
+
+    fun setBandwidthLimitKbps(kbps: Int) {
+        viewModelScope.launch {
+            appPrefs.setBandwidthLimitKbps(kbps, kbps)
             requestVpnRestart()
         }
     }

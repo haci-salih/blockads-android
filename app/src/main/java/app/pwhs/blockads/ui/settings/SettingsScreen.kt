@@ -32,6 +32,7 @@ import app.pwhs.blockads.R
 import app.pwhs.blockads.ui.event.UiEventEffect
 import app.pwhs.blockads.ui.logs.dialog.ConfirmClearLogDialog
 import app.pwhs.blockads.ui.settings.component.ApplicationsSection
+import app.pwhs.blockads.ui.settings.component.BandwidthLimitDialog
 import app.pwhs.blockads.ui.settings.component.CommunitySection
 import app.pwhs.blockads.ui.settings.component.DataSection
 import app.pwhs.blockads.ui.settings.component.DnsResponseTypeDialog
@@ -77,8 +78,10 @@ fun SettingsScreen(
     val dailySummaryEnabled by viewModel.dailySummaryEnabled.collectAsStateWithLifecycle()
     val milestoneNotificationsEnabled by viewModel.milestoneNotificationsEnabled.collectAsStateWithLifecycle()
     val upstreamDNS by viewModel.upstreamDns.collectAsStateWithLifecycle()
+    val bandwidthLimitKbps by viewModel.bandwidthLimitKbps.collectAsStateWithLifecycle()
 
     var showDnsResponseTypeDialog by remember { mutableStateOf(false) }
+    var showBandwidthLimitDialog by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -125,6 +128,7 @@ fun SettingsScreen(
 
                 dnsResponseType = dnsResponseType,
                 upstreamDNS = upstreamDNS,
+                bandwidthLimitKbps = bandwidthLimitKbps,
                 onSetAutoReconnect = { viewModel.setAutoReconnect(it) },
 
                 onSetRoutingMode = { viewModel.setRoutingModeEnabled(it) },
@@ -133,6 +137,7 @@ fun SettingsScreen(
                 onSetSafeSearchEnabled = { viewModel.setSafeSearchEnabled(it) },
                 onSetYoutubeRestrictedMode = { viewModel.setYoutubeRestrictedMode(it) },
                 onShowDnsResponseTypeDialog = { showDnsResponseTypeDialog = true },
+                onShowBandwidthLimitDialog = { showBandwidthLimitDialog = true },
                 onNavigateToDNSProvider = onNavigateToDNSProvider,
                 onNavigateToWireGuardImport = onNavigateToWireGuardImport,
                 onNavigateToHttpsFiltering = onNavigateToHttpsFiltering
@@ -226,6 +231,17 @@ fun SettingsScreen(
                     showDnsResponseTypeDialog = false
                 },
                 onDismiss = { showDnsResponseTypeDialog = false }
+            )
+        }
+
+        if (showBandwidthLimitDialog) {
+            BandwidthLimitDialog(
+                currentKbps = bandwidthLimitKbps,
+                onSelect = { kbps ->
+                    viewModel.setBandwidthLimitKbps(kbps)
+                    showBandwidthLimitDialog = false
+                },
+                onDismiss = { showBandwidthLimitDialog = false }
             )
         }
 
