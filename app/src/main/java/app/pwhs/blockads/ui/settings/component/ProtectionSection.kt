@@ -48,7 +48,8 @@ fun ProtectionSection(
 
     dnsResponseType: String,
     upstreamDNS: String,
-    bandwidthLimitKbps: Int,
+    bandwidthLimitDownKbps: Int,
+    bandwidthLimitUpKbps: Int,
     onSetAutoReconnect: (Boolean) -> Unit,
     onSetRoutingMode: (Boolean) -> Unit,
     onSetNetworkSwitchDelayEnabled: (Boolean) -> Unit,
@@ -184,10 +185,11 @@ fun ProtectionSection(
                 SettingItem(
                     icon = Icons.Default.Speed,
                     title = "Bant Genişliği Sınırı",
-                    desc = if (bandwidthLimitKbps <= AppPreferences.BANDWIDTH_LIMIT_UNLIMITED) {
-                        "Sınırsız"
-                    } else {
-                        "$bandwidthLimitKbps KB/s"
+                    desc = run {
+                        val unlimited = AppPreferences.BANDWIDTH_LIMIT_UNLIMITED
+                        val down = if (bandwidthLimitDownKbps <= unlimited) "Sınırsız" else "${bandwidthLimitDownKbps} KB/s"
+                        val up = if (bandwidthLimitUpKbps <= unlimited) "Sınırsız" else "${bandwidthLimitUpKbps} KB/s"
+                        "İndirme: $down · Yükleme: $up"
                     },
                     onClick = onShowBandwidthLimitDialog
                 )
