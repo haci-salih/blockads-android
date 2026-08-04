@@ -168,6 +168,14 @@ type Engine struct {
 	// Stats
 	totalQueries   atomic.Int64
 	blockedQueries atomic.Int64
+
+	// Bandwidth throttling — user-configurable global caps (KB/s), 0 =
+	// unlimited. Shared by the full-tunnel bufferedTun (fulltunnel.go):
+	// upLimiter throttles TUN reads (device → internet), downLimiter
+	// throttles TUN writes (internet → device). Set via
+	// SetBandwidthLimitKbps, callable from Kotlin at any time.
+	upLimiter   *bandwidthLimiter
+	downLimiter *bandwidthLimiter
 }
 
 // Stats holds engine statistics.
@@ -183,6 +191,8 @@ func NewEngine() *Engine {
 		safeSearch:     NewSafeSearch(),
 		responseType:   ResponseCustomIP,
 		router:         router,
+		upLimiter:      newBandwidthLimiter(),
+		downLimiter:    newBandwidthLimiter(),
 	}
 	e.interceptor = NewDnsInterceptor(e, router)
 	return e
@@ -365,6 +375,36 @@ func (e *Engine) SetSafeSearch(enabled bool) {
 // SetYouTubeRestricted enables or disables YouTube restricted mode.
 func (e *Engine) SetYouTubeRestricted(enabled bool) {
 	e.safeSearch.SetYouTubeRestricted(enabled)
+}
+
+// SetBandwidthLimitKbps sets a global bandwidth cap, in kilobytes per
+// second, for the VPN tunnel (root-less / full-tunnel mode). downKbps
+// limits internet→device traffic (downloads), upKbps limits
+// device→internet traffic (uploads). Pass 0 for either to leave that
+// direction unlimited.
+//
+// This applies to ALL app traffic uniformly (plain passthrough, MITM'd
+// HTTPS, DNS) because it throttles at the shared TUN read/write in
+// fulltunnel.go, not per-flow. It is NOT per-app.
+//
+// Safe to call at any time — before the tunnel starts, or while it's
+// already running (takes effect immediately, no restart needed).
+func (e *Engine) SetBandwidthLimitKbps(downKbps, upKbps int) {
+	e.downLimiter.SetKbps(downKbps)
+	e.upLimiter.SetKbps(upKbps)
+	logf("SetBandwidthLimitKbps: down=%dKB/s up=%dKB/s", downKbps, upKbps)
+}
+
+// GetDownloadLimitKbps returns the currently configured download limit
+// in KB/s. 0 means unlimited.
+func (e *Engine) GetDownloadLimitKbps() int {
+	return e.downLimiter.GetKbps()
+}
+
+// GetUploadLimitKbps returns the currently configured upload limit in
+// KB/s. 0 means unlimited.
+func (e *Engine) GetUploadLimitKbps() int {
+	return e.upLimiter.GetKbps()
 }
 
 // SetSplitDNSZones configures which domain zones should be resolved via the
