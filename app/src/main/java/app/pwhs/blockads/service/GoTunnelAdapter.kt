@@ -294,6 +294,8 @@ class GoTunnelAdapter(
         selectedBrowsers: Set<String> = emptySet(),
         certDir: String = "",
         filterHttp3: Boolean = false,
+        downKbps: Int = 0,
+        upKbps: Int = 0,
         socketProtector: ((Int) -> Boolean)? = null
     ) {
         if (isRunning) return
@@ -351,6 +353,16 @@ class GoTunnelAdapter(
         // Give Go the paths to the Mmap logs so it can read them natively for max speed
         updateTries()
         updateCosmeticRules()
+
+        // Global bandwidth throttle (root-less). Currently only enforced
+        // in FULL-TUNNEL mode (bufferedTun in fulltunnel.go); WireGuard
+        // mode uses a different TUN bridge (channelTUN) that isn't wired
+        // up to the limiter yet. Safe to call regardless — 0 means
+        // unlimited and is a no-op either way.
+        engine.setBandwidthLimitKbps(downKbps, upKbps)
+        if (downKbps > 0 || upKbps > 0) {
+            Timber.d("Bandwidth limit set: down=${downKbps}KB/s up=${upKbps}KB/s")
+        }
 
         val fd = vpnInterface.fd
         Timber.d("Starting Go tunnel engine with fd=$fd, wg=${wgConfigJson.isNotEmpty()}")

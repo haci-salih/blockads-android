@@ -562,6 +562,8 @@ class AdBlockVpnService : VpnService() {
                 val selectedBrowsers = appPrefs.getSelectedBrowsersSnapshot()
                 val certDir = filesDir.absolutePath
                 val filterHttp3 = appPrefs.getFilterHttp3Snapshot()
+                val bandwidthDownKbps = appPrefs.getBandwidthLimitDownKbpsSnapshot()
+                val bandwidthUpKbps = appPrefs.getBandwidthLimitUpKbpsSnapshot()
 
                 vpnInterface?.let {
                     // start() blocks the coroutine while reading from TUN
@@ -573,6 +575,8 @@ class AdBlockVpnService : VpnService() {
                         selectedBrowsers = selectedBrowsers,
                         certDir = certDir,
                         filterHttp3 = filterHttp3,
+                        downKbps = bandwidthDownKbps,
+                        upKbps = bandwidthUpKbps,
                         socketProtector = { fd ->
                             try {
                                 protect(fd)
