@@ -49,6 +49,7 @@ import app.pwhs.blockads.ui.data.ProfileKey
 import app.pwhs.blockads.ui.data.SettingsKey
 import app.pwhs.blockads.ui.data.StatisticsKey
 import app.pwhs.blockads.ui.data.WhiteListAppKey
+import app.pwhs.blockads.ui.data.BandwidthWhitelistKey
 import app.pwhs.blockads.ui.data.TrustedNetworksKey
 import app.pwhs.blockads.ui.data.WireGuardEditKey
 import app.pwhs.blockads.ui.data.WireGuardImportKey
@@ -64,6 +65,7 @@ import app.pwhs.blockads.ui.profile.ProfileScreen
 import app.pwhs.blockads.ui.settings.SettingsScreen
 import app.pwhs.blockads.ui.statistics.StatisticsScreen
 import app.pwhs.blockads.ui.whitelist.AppWhitelistScreen
+import app.pwhs.blockads.ui.bandwidthwhitelist.BandwidthWhitelistScreen
 import app.pwhs.blockads.ui.wireguard.WireGuardEditScreen
 import app.pwhs.blockads.ui.wireguard.WireGuardImportScreen
 import org.koin.compose.koinInject
@@ -221,6 +223,10 @@ fun HomeApp(
                             showBottomBar = false
                             settingsStack.add(WhiteListAppKey)
                         },
+                        onNavigateToBandwidthWhitelist = {
+                            showBottomBar = false
+                            settingsStack.add(BandwidthWhitelistKey)
+                        },
                         onNavigateToTrustedNetworks = {
                             showBottomBar = false
                             settingsStack.add(TrustedNetworksKey)
@@ -314,6 +320,14 @@ fun HomeApp(
                 }
                 entry<WhiteListAppKey> {
                     AppWhitelistScreen(
+                        onNavigateBack = {
+                            showBottomBar = true
+                            settingsStack.removeLastOrNull()
+                        }
+                    )
+                }
+                entry<BandwidthWhitelistKey> {
+                    BandwidthWhitelistScreen(
                         onNavigateBack = {
                             showBottomBar = true
                             settingsStack.removeLastOrNull()
