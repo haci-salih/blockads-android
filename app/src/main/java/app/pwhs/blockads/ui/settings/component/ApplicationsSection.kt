@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AppBlocking
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,7 @@ import app.pwhs.blockads.R
 @Composable
 fun ApplicationsSection(
     onNavigateToWhitelistApps: () -> Unit,
+    onNavigateToBandwidthWhitelist: () -> Unit = {},
     onNavigateToAppManagement: () -> Unit,
     onNavigateToTrustedNetworks: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -34,6 +36,16 @@ fun ApplicationsSection(
                 title = stringResource(R.string.settings_whitelist_apps),
                 desc = stringResource(R.string.settings_whitelist_apps_desc),
                 onClick = onNavigateToWhitelistApps
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+            )
+            SettingItem(
+                icon = Icons.Default.Speed,
+                title = stringResource(R.string.settings_bandwidth_whitelist),
+                desc = stringResource(R.string.settings_bandwidth_whitelist_desc),
+                onClick = onNavigateToBandwidthWhitelist
             )
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp),
