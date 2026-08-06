@@ -70,6 +70,11 @@
     <string name="whitelist_apps_search">&quot;Arama uygulamaları…&quot;</string>
     <string name="whitelist_apps_empty">&quot;Hiçbir uygulama yüklü değil.&quot;</string>
     <string name="whitelist_apps_count">&quot;%d uygulama beyaz listeye alındı&quot;</string>
+    <string name="bandwidth_whitelist_title">&quot;Bant Genişliği İstisnaları&quot;</string>
+    <string name="bandwidth_whitelist_count">&quot;%d uygulama muaf&quot;</string>
+    <string name="bandwidth_whitelist_hint">&quot;Burada açtığın uygulamalar, bant genişliği sınırı aktifken bile hiç yavaşlatılmaz.&quot;</string>
+    <string name="bandwidth_whitelist_filter_exempt">&quot;Muaf&quot;</string>
+    <string name="bandwidth_whitelist_filter_throttled">&quot;Sınırlı&quot;</string>
     <string name="whitelist_tab_user">&quot;Kullanıcı Uygulamaları&quot;</string>
     <string name="whitelist_tab_system">&quot;Sistem Uygulamaları&quot;</string>
     <string name="whitelist_domains_add">&quot;Alan Adı Ekle&quot;</string>
@@ -135,6 +140,8 @@ Veri toplama yok. İzleme yok.&quot;</string>
     <string name="settings_update_all">&quot;Tüm Filtreleri Güncelle&quot;</string>
     <string name="settings_whitelist_apps">&quot;Beyaz Listeye Alınan Uygulamalar&quot;</string>
     <string name="settings_whitelist_apps_desc">&quot;Uygulamaları reklam engellemeden hariç tut&quot;</string>
+    <string name="settings_bandwidth_whitelist">&quot;Bant Genişliği İstisnaları&quot;</string>
+    <string name="settings_bandwidth_whitelist_desc">&quot;Uygulamaları bant genişliği sınırından muaf tut&quot;</string>
     <string name="settings_whitelist_domains">&quot;Beyaz Listeye Alınmış Alan Adları&quot;</string>
     <string name="settings_export">&quot;İhracat&quot;</string>
     <string name="settings_import">&quot;İçe aktarmak&quot;</string>
