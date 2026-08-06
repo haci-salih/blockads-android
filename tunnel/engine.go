@@ -176,6 +176,10 @@ type Engine struct {
 	// SetBandwidthLimitKbps, callable from Kotlin at any time.
 	upLimiter   *bandwidthLimiter
 	downLimiter *bandwidthLimiter
+
+	// bandwidthWhitelist holds app UIDs that are exempt from the
+	// global bandwidth limiter above, set via SetBandwidthWhitelist.
+	bandwidthWhitelist *uidSet
 }
 
 // Stats holds engine statistics.
@@ -188,11 +192,12 @@ type Stats struct {
 func NewEngine() *Engine {
 	router := NewRouter()
 	e := &Engine{
-		safeSearch:     NewSafeSearch(),
-		responseType:   ResponseCustomIP,
-		router:         router,
-		upLimiter:      newBandwidthLimiter(),
-		downLimiter:    newBandwidthLimiter(),
+		safeSearch:         NewSafeSearch(),
+		responseType:       ResponseCustomIP,
+		router:             router,
+		upLimiter:          newBandwidthLimiter(),
+		downLimiter:        newBandwidthLimiter(),
+		bandwidthWhitelist: newUIDSet(),
 	}
 	e.interceptor = NewDnsInterceptor(e, router)
 	return e
@@ -405,6 +410,32 @@ func (e *Engine) GetDownloadLimitKbps() int {
 // KB/s. 0 means unlimited.
 func (e *Engine) GetUploadLimitKbps() int {
 	return e.upLimiter.GetKbps()
+}
+
+// SetBandwidthWhitelist marks specific apps as exempt from the global
+// bandwidth limiter (SetBandwidthLimitKbps) — a "don't throttle these"
+// whitelist. uids is a comma-separated list of Android app UIDs (e.g.
+// "10123,10456"), which Kotlin resolves from the user's app picker via
+// PackageManager (ApplicationInfo.uid). Pass an empty string to clear
+// the whitelist (throttle everything again).
+//
+// Takes effect for new flows going forward; flows already in progress
+// keep whatever throttling they started with.
+func (e *Engine) SetBandwidthWhitelist(uids string) {
+	e.bandwidthWhitelist.SetFromCSV(uids)
+	logf("SetBandwidthWhitelist: %s", uids)
+}
+
+// throttleLimitersForUID returns the engine's configured up/down
+// bandwidth limiters for a given app UID, or (nil, nil) if that UID is
+// on the throttle whitelist — meaning the app should not be throttled
+// at all. Passing the result straight to bidiCopyFlow / throttle()
+// makes "nil limiter = unthrottled" the single source of truth.
+func (e *Engine) throttleLimitersForUID(uid int) (up, down *bandwidthLimiter) {
+	if e == nil || e.bandwidthWhitelist.Contains(uid) {
+		return nil, nil
+	}
+	return e.upLimiter, e.downLimiter
 }
 
 // SetSplitDNSZones configures which domain zones should be resolved via the
@@ -1259,12 +1290,12 @@ func (e *Engine) startTcpStackParallel() error {
 		// Phase D path — MITM handler applies the full filtering flow.
 		stack.SetTcpHandler(newMitmTcpHandler(certMgr, filter, e, uidr, protectFn))
 		// Drop browser QUIC so HTTP/3 can't bypass the TCP-TLS MITM.
-		stack.SetUdpHandler(newMitmUdpHandler(filter, uidr, protectFn))
+		stack.SetUdpHandler(newMitmUdpHandler(filter, uidr, protectFn, e))
 		logf("TcpIpStack: MITM handler registered (TCP + QUIC-suppressing UDP)")
 	} else {
 		// Phase C default — direct-dial passthrough, no MITM.
-		stack.SetTcpHandler(newProtectedTcpHandler(uidr, protectFn))
-		stack.SetUdpHandler(newProtectedUdpHandler(uidr, protectFn))
+		stack.SetTcpHandler(newProtectedTcpHandler(uidr, protectFn, e))
+		stack.SetUdpHandler(newProtectedUdpHandler(uidr, protectFn, e))
 	}
 
 	if err := stack.Start(pipe, mtu); err != nil {

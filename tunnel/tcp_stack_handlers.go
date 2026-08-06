@@ -28,8 +28,10 @@ const (
 
 // newProtectedTcpHandler returns a TcpFlowHandler that forwards the
 // TCP flow to its real destination with socket protection. protectFn
-// may be nil in standalone / non-VPN scenarios.
-func newProtectedTcpHandler(uidr UIDResolver, protectFn func(fd int) bool) TcpFlowHandler {
+// may be nil in standalone / non-VPN scenarios. engine may be nil (no
+// throttling applied); when non-nil, its bandwidth limiters are
+// applied unless the flow's UID is on the throttle whitelist.
+func newProtectedTcpHandler(uidr UIDResolver, protectFn func(fd int) bool, engine *Engine) TcpFlowHandler {
 	return func(conn adapter.TCPConn) {
 		defer conn.Close()
 
@@ -68,7 +70,8 @@ func newProtectedTcpHandler(uidr UIDResolver, protectFn func(fd int) bool) TcpFl
 		// No absolute deadline — rely on tun2socks' TCP keepalive
 		// (60s idle / 30s interval / 9 probes) to clean up stuck
 		// connections. Hard deadlines killed long-lived streams.
-		bidiCopyFlow(conn, remote)
+		upLim, downLim := engine.throttleLimitersForUID(uid)
+		bidiCopyFlow(conn, remote, upLim, downLim)
 	}
 }
 
@@ -80,7 +83,11 @@ func newProtectedTcpHandler(uidr UIDResolver, protectFn func(fd int) bool) TcpFl
 // QUIC (UDP 443) deserves special handling later (either blocked
 // per-app or full proxying with DTLS termination); Phase C just
 // forwards everything to keep parity with the legacy pipeline.
-func newProtectedUdpHandler(uidr UIDResolver, protectFn func(fd int) bool) UdpFlowHandler {
+//
+// engine may be nil (no throttling applied); when non-nil, its
+// bandwidth limiters are applied unless the flow's UID is on the
+// throttle whitelist.
+func newProtectedUdpHandler(uidr UIDResolver, protectFn func(fd int) bool, engine *Engine) UdpFlowHandler {
 	return func(conn adapter.UDPConn) {
 		defer conn.Close()
 
@@ -108,7 +115,8 @@ func newProtectedUdpHandler(uidr UIDResolver, protectFn func(fd int) bool) UdpFl
 		// No absolute deadline — rely on tun2socks' TCP keepalive
 		// (60s idle / 30s interval / 9 probes) to clean up stuck
 		// connections. Hard deadlines killed long-lived streams.
-		bidiCopyFlow(conn, remote)
+		upLim, downLim := engine.throttleLimitersForUID(uid)
+		bidiCopyFlow(conn, remote, upLim, downLim)
 	}
 }
 
@@ -132,20 +140,25 @@ func protectedControl(protectFn func(fd int) bool) func(network, address string,
 // semantics where available so a FIN on one direction does not abort
 // the opposite direction mid-stream (same bug H1 fixed for the legacy
 // proxy's bidirectionalCopy).
-func bidiCopyFlow(a, b net.Conn) {
+//
+// upLimiter paces a→b (app→internet, upload); downLimiter paces b→a
+// (internet→app, download). Either may be nil for no throttling in
+// that direction (e.g. the flow's app UID is on the bandwidth
+// whitelist — see Engine.throttleLimitersForUID).
+func bidiCopyFlow(a, b net.Conn, upLimiter, downLimiter *bandwidthLimiter) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		io.Copy(b, a)
+		io.Copy(throttle(b, upLimiter), a)
 		if cw, ok := b.(interface{ CloseWrite() error }); ok {
 			cw.CloseWrite()
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		io.Copy(a, b)
+		io.Copy(throttle(a, downLimiter), b)
 		if cw, ok := a.(interface{ CloseWrite() error }); ok {
 			cw.CloseWrite()
 		}

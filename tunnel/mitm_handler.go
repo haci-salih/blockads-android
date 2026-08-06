@@ -64,6 +64,15 @@ func newMitmTcpHandler(
 		flow := tcpFlowID(conn)
 		uid := resolveFlowUID(uidr, ProtocolTCP, flow)
 
+		// Bandwidth throttling for this flow: nil,nil if uid is on the
+		// whitelist (SetBandwidthWhitelist) or blocker isn't an *Engine
+		// (shouldn't happen in practice — every real caller passes the
+		// engine itself as blocker).
+		var upLim, downLim *bandwidthLimiter
+		if eng, ok := blocker.(*Engine); ok {
+			upLim, downLim = eng.throttleLimitersForUID(uid)
+		}
+
 		if flow.serverIP.IsUnspecified() {
 			return
 		}
@@ -90,13 +99,13 @@ func newMitmTcpHandler(
 		// are local services (LAN printers, router admin pages) that
 		// often have self-signed certs or none at all.
 		if isLoopbackOrInternal(flow.serverIP.String()) {
-			relayDirectFromFlow(conn, flow, blocker, protectFn)
+			relayDirectFromFlow(conn, flow, blocker, protectFn, upLim, downLim)
 			return
 		}
 
 		// Gate 1 — only attempt MITM on HTTP/HTTPS well-known ports.
 		if flow.serverPort != 443 && flow.serverPort != 80 {
-			relayDirectFromFlow(conn, flow, blocker, protectFn)
+			relayDirectFromFlow(conn, flow, blocker, protectFn, upLim, downLim)
 			return
 		}
 
@@ -105,7 +114,7 @@ func newMitmTcpHandler(
 		// unknown (API < 29, resolver failure), err on the safe side:
 		// passthrough rather than MITM an unknown app.
 		if filter.HasAllowedUIDs() && (uid == UIDUnknown || !filter.IsUIDAllowed(uid)) {
-			relayDirectFromFlow(conn, flow, blocker, protectFn)
+			relayDirectFromFlow(conn, flow, blocker, protectFn, upLim, downLim)
 			return
 		}
 
@@ -126,7 +135,7 @@ func newMitmTcpHandler(
 		} else {
 			// Unknown protocol on 443/80 — probably something proxied
 			// through these ports that isn't TLS or HTTP. Passthrough.
-			relayDirectPeeked(conn, peekedReader, flow, "", blocker, protectFn)
+			relayDirectPeeked(conn, peekedReader, flow, "", blocker, protectFn, upLim, downLim)
 			return
 		}
 
@@ -147,7 +156,7 @@ func newMitmTcpHandler(
 		// Gate 5 — sensitive / cert-pinned domain → passthrough so the
 		// client's own TLS validation succeeds.
 		if !filter.IsInterceptionAllowed(hostname) {
-			relayDirectPeeked(conn, peekedReader, flow, hostname, blocker, protectFn)
+			relayDirectPeeked(conn, peekedReader, flow, hostname, blocker, protectFn, upLim, downLim)
 			return
 		}
 
@@ -163,9 +172,9 @@ func newMitmTcpHandler(
 
 		// Gate 7 — MITM.
 		if classification == classTLS {
-			mitmTLSFlow(conn, peekedReader, certMgr, filter, blocker, hostname, flow, protectFn)
+			mitmTLSFlow(conn, peekedReader, certMgr, filter, blocker, hostname, flow, protectFn, upLim, downLim)
 		} else {
-			mitmHTTPFlow(conn, peekedReader, blocker, hostname, flow, protectFn)
+			mitmHTTPFlow(conn, peekedReader, blocker, hostname, flow, protectFn, upLim, downLim)
 		}
 	}
 }
@@ -179,8 +188,8 @@ func newMitmTcpHandler(
 // before the stack, other apps' QUIC is untouched, and browser QUIC to
 // non-443 ports is left alone. Mirrors AdGuard forcing TCP when HTTP/3
 // filtering is on.
-func newMitmUdpHandler(filter *MitmFilter, uidr UIDResolver, protectFn func(fd int) bool) UdpFlowHandler {
-	base := newProtectedUdpHandler(uidr, protectFn)
+func newMitmUdpHandler(filter *MitmFilter, uidr UIDResolver, protectFn func(fd int) bool, engine *Engine) UdpFlowHandler {
+	base := newProtectedUdpHandler(uidr, protectFn, engine)
 	return func(conn adapter.UDPConn) {
 		flow := udpFlowID(conn)
 		if flow.serverPort == 443 && filter != nil && filter.HasAllowedUIDs() {
@@ -441,14 +450,14 @@ func dialUpstream(flow flowID, hostname string, blocker adBlockChecker, protectF
 // streaming, large download) is allowed to live as long as the apps
 // need it. The previous 3-minute hard deadline was killing YouTube
 // playback mid-stream and surfacing as ERR_CONNECTION_ABORTED.
-func relayDirectFromFlow(clientConn net.Conn, flow flowID, blocker adBlockChecker, protectFn func(fd int) bool) {
+func relayDirectFromFlow(clientConn net.Conn, flow flowID, blocker adBlockChecker, protectFn func(fd int) bool, upLimiter, downLimiter *bandwidthLimiter) {
 	remote, err := dialUpstream(flow, "", blocker, protectFn)
 	if err != nil {
 		return
 	}
 	defer remote.Close()
 
-	bidiCopyFlow(clientConn, remote)
+	bidiCopyFlow(clientConn, remote, upLimiter, downLimiter)
 }
 
 // relayDirectPeeked dials the destination and writes the peeked bytes
@@ -456,7 +465,7 @@ func relayDirectFromFlow(clientConn net.Conn, flow flowID, blocker adBlockChecke
 // when the classifier decides not to MITM. hostname is the SNI / Host
 // (may be "") and enables IPv6→IPv4 fallback when the direct-IP dial
 // fails.
-func relayDirectPeeked(clientConn net.Conn, clientReader io.Reader, flow flowID, hostname string, blocker adBlockChecker, protectFn func(fd int) bool) {
+func relayDirectPeeked(clientConn net.Conn, clientReader io.Reader, flow flowID, hostname string, blocker adBlockChecker, protectFn func(fd int) bool, upLimiter, downLimiter *bandwidthLimiter) {
 	remote, err := dialUpstream(flow, hostname, blocker, protectFn)
 	if err != nil {
 		return
@@ -466,14 +475,14 @@ func relayDirectPeeked(clientConn net.Conn, clientReader io.Reader, flow flowID,
 	// client → remote: peeked bytes then stream
 	done := make(chan struct{}, 2)
 	go func() {
-		io.Copy(remote, clientReader)
+		io.Copy(throttle(remote, upLimiter), clientReader)
 		if cw, ok := remote.(interface{ CloseWrite() error }); ok {
 			cw.CloseWrite()
 		}
 		done <- struct{}{}
 	}()
 	go func() {
-		io.Copy(clientConn, remote)
+		io.Copy(throttle(clientConn, downLimiter), remote)
 		if cw, ok := clientConn.(interface{ CloseWrite() error }); ok {
 			cw.CloseWrite()
 		}
@@ -548,6 +557,7 @@ func mitmTLSFlow(
 	hostname string,
 	flow flowID,
 	protectFn func(fd int) bool,
+	upLimiter, downLimiter *bandwidthLimiter,
 ) {
 	// Dial the real server first so cert pinning checks catch obvious
 	// problems before we commit to MITM. Uses the v6→v4 fallback so
@@ -569,7 +579,7 @@ func mitmTLSFlow(
 		// Upstream cert failure → fall back to raw passthrough with
 		// replay so the client's own TLS validation can surface a
 		// meaningful error (or succeed).
-		relayDirectPeeked(clientConn, clientReader, flow, hostname, blocker, protectFn)
+		relayDirectPeeked(clientConn, clientReader, flow, hostname, blocker, protectFn, upLimiter, downLimiter)
 		return
 	}
 	defer serverConn.Close()
@@ -589,7 +599,7 @@ func mitmTLSFlow(
 			logf("MITM: not filtering '%s' — %s; passthrough", hostname, reason)
 			filter.BlacklistDomain(hostname)
 			serverConn.Close()
-			relayDirectPeeked(clientConn, clientReader, flow, hostname, blocker, protectFn)
+			relayDirectPeeked(clientConn, clientReader, flow, hostname, blocker, protectFn, upLimiter, downLimiter)
 			return
 		}
 	}
@@ -612,7 +622,7 @@ func mitmTLSFlow(
 	}
 	defer clientTLS.Close()
 
-	relayHTTPFlow(clientTLS, serverConn, hostname, blocker)
+	relayHTTPFlow(clientTLS, serverConn, hostname, blocker, upLimiter, downLimiter)
 }
 
 // mitmHTTPFlow handles plaintext HTTP (port 80) flows. Same gates
@@ -624,6 +634,7 @@ func mitmHTTPFlow(
 	hostname string,
 	flow flowID,
 	protectFn func(fd int) bool,
+	upLimiter, downLimiter *bandwidthLimiter,
 ) {
 	serverConn, err := dialUpstream(flow, hostname, blocker, protectFn)
 	if err != nil {
@@ -631,7 +642,7 @@ func mitmHTTPFlow(
 	}
 	defer serverConn.Close()
 
-	relayHTTPFlow(&peekReplayConn{Conn: clientConn, r: clientReader}, serverConn, hostname, blocker)
+	relayHTTPFlow(&peekReplayConn{Conn: clientConn, r: clientReader}, serverConn, hostname, blocker, upLimiter, downLimiter)
 }
 
 // relayHTTPFlow is the flow-mode equivalent of MitmProxy.relayHTTP —
@@ -640,9 +651,15 @@ func mitmHTTPFlow(
 // local.pwhs.app sub-requests inside the same session. Same logic as
 // the legacy path, duplicated here so Phase E can remove the legacy
 // version without breaking this one.
-func relayHTTPFlow(clientConn, serverConn net.Conn, hostname string, blocker adBlockChecker) {
+func relayHTTPFlow(clientConn, serverConn net.Conn, hostname string, blocker adBlockChecker, upLimiter, downLimiter *bandwidthLimiter) {
 	cr := bufio.NewReader(clientConn)
 	sr := bufio.NewReader(serverConn)
+	// Throttled writers for the REAL proxied exchange only — locally
+	// synthesized responses (blocked-ad stub, local asset server)
+	// below don't consume real internet bandwidth, so they bypass
+	// these and write straight to clientConn.
+	throttledServerWriter := throttle(serverConn, upLimiter)
+	throttledClientWriter := throttle(clientConn, downLimiter)
 
 	for {
 		req, err := http.ReadRequest(cr)
@@ -683,7 +700,7 @@ func relayHTTPFlow(clientConn, serverConn net.Conn, hostname string, blocker adB
 			req.Header.Del("Accept-Encoding")
 		}
 
-		if err := req.Write(serverConn); err != nil {
+		if err := req.Write(throttledServerWriter); err != nil {
 			return
 		}
 
@@ -694,7 +711,7 @@ func relayHTTPFlow(clientConn, serverConn net.Conn, hostname string, blocker adB
 		if ShouldInjectHTML(resp.Header.Get("Content-Type")) {
 			wrapResponseForInjection(resp)
 		}
-		if err := resp.Write(clientConn); err != nil {
+		if err := resp.Write(throttledClientWriter); err != nil {
 			resp.Body.Close()
 			return
 		}

@@ -27,14 +27,6 @@ type bufferedTun struct {
 	tun  *os.File
 	out  chan []byte
 	stop chan struct{}
-
-	// Bandwidth throttling (SetBandwidthLimitKbps). Either may be nil
-	// (defensively, newBandwidthLimiter() is never nil in practice —
-	// Engine always constructs both), in which case that direction is
-	// simply not throttled. upLimiter gates Read() (device→internet);
-	// downLimiter gates the drain loop's TUN write (internet→device).
-	upLimiter   *bandwidthLimiter
-	downLimiter *bandwidthLimiter
 }
 
 // tunWriteQueueDepth bounds buffered outbound packets. On overflow the
@@ -42,30 +34,15 @@ type bufferedTun struct {
 // blocking the gVisor dispatch goroutine.
 const tunWriteQueueDepth = 2048
 
-func newBufferedTun(tun *os.File, upLimiter, downLimiter *bandwidthLimiter) *bufferedTun {
-	b := &bufferedTun{
-		tun:         tun,
-		out:         make(chan []byte, tunWriteQueueDepth),
-		stop:        make(chan struct{}),
-		upLimiter:   upLimiter,
-		downLimiter: downLimiter,
-	}
+func newBufferedTun(tun *os.File) *bufferedTun {
+	b := &bufferedTun{tun: tun, out: make(chan []byte, tunWriteQueueDepth), stop: make(chan struct{})}
 	go b.drain()
 	return b
 }
 
 // Read passes through to the TUN so gVisor dispatches inbound packets
-// directly (no queue). Blocking here to enforce the upload limit is
-// intentional and safe (unlike Write, below): Read runs on gVisor's own
-// dedicated reader goroutine, not the per-packet dispatch goroutine, so
-// slowing it down simply produces natural backpressure on uploads.
-func (b *bufferedTun) Read(p []byte) (int, error) {
-	n, err := b.tun.Read(p)
-	if n > 0 && b.upLimiter != nil {
-		b.upLimiter.Wait(n)
-	}
-	return n, err
-}
+// directly (no queue).
+func (b *bufferedTun) Read(p []byte) (int, error) { return b.tun.Read(p) }
 
 // Write never blocks: copy + enqueue, drop on overflow.
 func (b *bufferedTun) Write(p []byte) (int, error) {
@@ -80,19 +57,11 @@ func (b *bufferedTun) Write(p []byte) (int, error) {
 }
 
 // drain writes queued packets to the real TUN until stopped or a write
-// fails (TUN closed). The download bandwidth limit is enforced HERE,
-// not in Write(): Write() must stay non-blocking (see its comment) so
-// it never stalls the gVisor dispatch goroutine, but this drain
-// goroutine is separate and dedicated, so blocking it to pace writes
-// is safe — packets simply queue up (and, if the queue is full,
-// overflow packets are dropped by Write(), same as today).
+// fails (TUN closed).
 func (b *bufferedTun) drain() {
 	for {
 		select {
 		case pkt := <-b.out:
-			if b.downLimiter != nil {
-				b.downLimiter.Wait(len(pkt))
-			}
 			if _, err := b.tun.Write(pkt); err != nil {
 				logf("StartFull: TUN drain write error, stopping writer: %v", err)
 				return
@@ -214,9 +183,7 @@ func (e *Engine) StartFull(fd int, protector SocketProtector) {
 
 	// gVisor reads the TUN directly (no inbound queue) but writes go
 	// through an async drain so a slow TUN can't block the dispatch path.
-	// upLimiter/downLimiter enforce the user-configured bandwidth cap
-	// (SetBandwidthLimitKbps) uniformly across all traffic on this TUN.
-	btun := newBufferedTun(tunFile, e.upLimiter, e.downLimiter)
+	btun := newBufferedTun(tunFile)
 
 	e.mu.Lock()
 	e.tunFile = tunFile
@@ -249,7 +216,7 @@ func (e *Engine) StartFull(fd int, protector SocketProtector) {
 // through to the MITM-aware UDP handler (browser QUIC suppression +
 // protected passthrough).
 func newFullTunnelUdpHandler(engine *Engine, filter *MitmFilter, uidr UIDResolver, protectFn func(fd int) bool) UdpFlowHandler {
-	relay := newProtectedUdpHandler(uidr, protectFn)
+	relay := newProtectedUdpHandler(uidr, protectFn, engine)
 	return func(conn adapter.UDPConn) {
 		flow := udpFlowID(conn)
 		// DNS → answer locally (adblock + resolve).
@@ -289,7 +256,14 @@ func newFullPassthroughTcpHandler(engine *Engine, uidr UIDResolver, protectFn fu
 		defer conn.Close()
 		flow := tcpFlowID(conn)
 		engine.logConnection(flow, ProtocolTCP)
-		relayDirectFromFlow(conn, flow, engine, protectFn)
+		// Safe to resolve here: this is the int-only UIDResolver
+		// (AppUidResolver), not the AppResolver used for connection-log
+		// app *names* that panics under cgocheck in this hot path (see
+		// note above) — resolveFlowUID is already used safely on this
+		// same kind of path in newMitmTcpHandler.
+		uid := resolveFlowUID(uidr, ProtocolTCP, flow)
+		upLim, downLim := engine.throttleLimitersForUID(uid)
+		relayDirectFromFlow(conn, flow, engine, protectFn, upLim, downLim)
 	}
 }
 

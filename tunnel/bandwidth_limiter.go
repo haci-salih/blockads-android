@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"golang.org/x/time/rate"
@@ -84,4 +85,31 @@ func (b *bandwidthLimiter) Wait(n int) {
 		n = burst
 	}
 	_ = l.WaitN(context.Background(), n)
+}
+
+// throttledWriter wraps an io.Writer so every Write call is paced by
+// limiter. Used to throttle one direction of a per-flow relay
+// (upload: writes to the remote/server side; download: writes to the
+// client/app side). Blocking in Write is intentional here — these
+// wrappers are only ever used inside per-flow goroutines (never on
+// the shared TUN dispatch path), so pacing them is safe.
+type throttledWriter struct {
+	w       io.Writer
+	limiter *bandwidthLimiter
+}
+
+func (t *throttledWriter) Write(p []byte) (int, error) {
+	if t.limiter != nil {
+		t.limiter.Wait(len(p))
+	}
+	return t.w.Write(p)
+}
+
+// throttle wraps w with limiter, unless limiter is nil (unlimited /
+// whitelisted app), in which case w is returned unchanged.
+func throttle(w io.Writer, limiter *bandwidthLimiter) io.Writer {
+	if limiter == nil {
+		return w
+	}
+	return &throttledWriter{w: w, limiter: limiter}
 }
