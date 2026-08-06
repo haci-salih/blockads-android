@@ -55,6 +55,7 @@ fun SettingsScreen(
     onNavigateToAppManagement: () -> Unit = { },
     onNavigateToFilterSetup: () -> Unit = { },
     onNavigateToWhitelistApps: () -> Unit = { },
+    onNavigateToBandwidthWhitelist: () -> Unit = { },
     onNavigateToTrustedNetworks: () -> Unit = { },
     onNavigateToWireGuardImport: () -> Unit = { },
     onNavigateToHttpsFiltering: () -> Unit = { },
@@ -155,6 +156,7 @@ fun SettingsScreen(
             // ── Applications ─────────────────────────────────────
             ApplicationsSection(
                 onNavigateToWhitelistApps = onNavigateToWhitelistApps,
+                onNavigateToBandwidthWhitelist = onNavigateToBandwidthWhitelist,
                 onNavigateToAppManagement = onNavigateToAppManagement,
                 onNavigateToTrustedNetworks = onNavigateToTrustedNetworks
             )
