@@ -296,6 +296,7 @@ class GoTunnelAdapter(
         filterHttp3: Boolean = false,
         downKbps: Int = 0,
         upKbps: Int = 0,
+        bandwidthWhitelistPackages: Set<String> = emptySet(),
         socketProtector: ((Int) -> Boolean)? = null
     ) {
         if (isRunning) return
@@ -362,6 +363,22 @@ class GoTunnelAdapter(
         engine.setBandwidthLimitKbps(downKbps.toLong(), upKbps.toLong())
         if (downKbps > 0 || upKbps > 0) {
             Timber.d("Bandwidth limit set: down=${downKbps}KB/s up=${upKbps}KB/s")
+        }
+        // Apps in this list are exempt from the limit above even
+        // while it's active. Converted from package names to UIDs the
+        // same way selectedBrowsers is above (Go only knows UIDs).
+        // Safe to call with an empty string (clears the whitelist /
+        // no-op if it was already empty).
+        val bandwidthWhitelistUids = bandwidthWhitelistPackages.mapNotNull { pkg ->
+            try {
+                context.packageManager.getPackageUid(pkg, 0)
+            } catch (e: Exception) {
+                null
+            }
+        }.joinToString(",")
+        engine.setBandwidthWhitelist(bandwidthWhitelistUids)
+        if (bandwidthWhitelistUids.isNotEmpty()) {
+            Timber.d("Bandwidth whitelist UIDs: $bandwidthWhitelistUids")
         }
 
         val fd = vpnInterface.fd

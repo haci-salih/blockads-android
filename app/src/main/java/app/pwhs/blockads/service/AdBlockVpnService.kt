@@ -564,6 +564,7 @@ class AdBlockVpnService : VpnService() {
                 val filterHttp3 = appPrefs.getFilterHttp3Snapshot()
                 val bandwidthDownKbps = appPrefs.getBandwidthLimitDownKbpsSnapshot()
                 val bandwidthUpKbps = appPrefs.getBandwidthLimitUpKbpsSnapshot()
+                val bandwidthWhitelistPackages = appPrefs.getBandwidthWhitelistedAppsSnapshot()
 
                 vpnInterface?.let {
                     // start() blocks the coroutine while reading from TUN
@@ -577,6 +578,7 @@ class AdBlockVpnService : VpnService() {
                         filterHttp3 = filterHttp3,
                         downKbps = bandwidthDownKbps,
                         upKbps = bandwidthUpKbps,
+                        bandwidthWhitelistPackages = bandwidthWhitelistPackages,
                         socketProtector = { fd ->
                             try {
                                 protect(fd)
