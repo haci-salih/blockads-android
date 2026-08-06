@@ -3,6 +3,7 @@ package app.pwhs.blockads.ui.bandwidthwhitelist
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import androidx.lifecycle.application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.pwhs.blockads.data.datastore.AppPreferences
