@@ -33,6 +33,11 @@ class AppPreferences(private val context: Context) {
         private val KEY_DNS_PROVIDER_ID = stringPreferencesKey("dns_provider_id")
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_WHITELISTED_APPS = stringSetPreferencesKey("whitelisted_apps")
+        // Apps exempt from the global bandwidth limiter (SetBandwidthLimitKbps).
+        // Stored as package names (like KEY_WHITELISTED_APPS); converted to
+        // Android app UIDs before being sent to the Go engine, since that's
+        // what the engine matches flows against.
+        private val KEY_BANDWIDTH_WHITELISTED_APPS = stringSetPreferencesKey("bandwidth_whitelisted_apps")
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
         private val KEY_AUTO_UPDATE_ENABLED = booleanPreferencesKey("auto_update_enabled")
@@ -202,6 +207,12 @@ class AppPreferences(private val context: Context) {
 
     val whitelistedApps: Flow<Set<String>> = context.dataStore.data.map { prefs ->
         prefs[KEY_WHITELISTED_APPS] ?: emptySet()
+    }
+
+    // Apps exempt from the global bandwidth limiter — a "don't throttle
+    // these" list, independent of the ad-block whitelist above.
+    val bandwidthWhitelistedApps: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_BANDWIDTH_WHITELISTED_APPS] ?: emptySet()
     }
 
     val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
@@ -465,6 +476,23 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    suspend fun setBandwidthWhitelistedApps(apps: Set<String>) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_BANDWIDTH_WHITELISTED_APPS] = apps
+        }
+    }
+
+    suspend fun toggleBandwidthWhitelistedApp(packageName: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_BANDWIDTH_WHITELISTED_APPS] ?: emptySet()
+            prefs[KEY_BANDWIDTH_WHITELISTED_APPS] = if (packageName in current) {
+                current - packageName
+            } else {
+                current + packageName
+            }
+        }
+    }
+
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_THEME_MODE] = mode
@@ -587,6 +615,10 @@ class AppPreferences(private val context: Context) {
 
     suspend fun getWhitelistedAppsSnapshot(): Set<String> {
         return whitelistedApps.first()
+    }
+
+    suspend fun getBandwidthWhitelistedAppsSnapshot(): Set<String> {
+        return bandwidthWhitelistedApps.first()
     }
 
     suspend fun setRoutingMode(mode: String) {
