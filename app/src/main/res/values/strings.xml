@@ -71,6 +71,11 @@
     <string name="whitelist_apps_search">Search apps…</string>
     <string name="whitelist_apps_empty">No apps installed</string>
     <string name="whitelist_apps_count">%d apps whitelisted</string>
+    <string name="bandwidth_whitelist_title">Bandwidth Whitelist</string>
+    <string name="bandwidth_whitelist_count">%d apps exempt</string>
+    <string name="bandwidth_whitelist_hint">Apps you turn on here are never throttled, even while the bandwidth limit is active.</string>
+    <string name="bandwidth_whitelist_filter_exempt">Exempt</string>
+    <string name="bandwidth_whitelist_filter_throttled">Throttled</string>
     <string name="whitelist_tab_user">User Apps</string>
     <string name="whitelist_tab_system">System Apps</string>
     <string name="whitelist_domains_add">Add Domain</string>
@@ -164,6 +169,8 @@
     <string name="settings_update_all">Update All Filters</string>
     <string name="settings_whitelist_apps">Whitelisted Apps</string>
     <string name="settings_whitelist_apps_desc">Exclude apps from ad blocking</string>
+    <string name="settings_bandwidth_whitelist">Bandwidth Whitelist</string>
+    <string name="settings_bandwidth_whitelist_desc">Exempt apps from the bandwidth limit</string>
     <string name="trusted_networks_title">Trusted networks</string>
     <string name="trusted_networks_settings_desc">Auto-pause BlockAds on chosen Wi-Fi networks</string>
     <string name="trusted_networks_toggle">Pause on trusted networks</string>
