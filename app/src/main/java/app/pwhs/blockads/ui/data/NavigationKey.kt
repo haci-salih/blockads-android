@@ -46,6 +46,9 @@ data object AboutKey : NavKey
 data object WhiteListAppKey : NavKey
 
 @Serializable
+data object BandwidthWhitelistKey : NavKey
+
+@Serializable
 data object AppManagementKey : NavKey
 
 @Serializable
