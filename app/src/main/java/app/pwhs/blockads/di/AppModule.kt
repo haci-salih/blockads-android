@@ -177,6 +177,12 @@ val appModule = module {
         )
     }
     viewModel {
+        app.pwhs.blockads.ui.bandwidthwhitelist.BandwidthWhitelistViewModel(
+            appPrefs = get(),
+            application = androidApplication()
+        )
+    }
+    viewModel {
         app.pwhs.blockads.ui.trustednetworks.TrustedNetworksViewModel(
             appPrefs = get(),
             application = androidApplication()
